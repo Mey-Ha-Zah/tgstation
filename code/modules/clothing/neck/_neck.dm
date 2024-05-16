@@ -44,6 +44,7 @@
 	icon = 'icons/obj/clothing/neck.dmi'
 	icon_state = "tie_greyscale_tied"
 	inhand_icon_state = "" //no inhands
+	alternate_worn_layer = LOW_NECK_LAYER // So that it renders below suit jackets, MODsuits, etc
 	w_class = WEIGHT_CLASS_SMALL
 	custom_price = PAYCHECK_CREW
 	greyscale_config = /datum/greyscale_config/ties
@@ -66,6 +67,7 @@
 
 /obj/item/clothing/neck/tie/examine(mob/user)
 	. = ..()
+	. += span_notice("The tie can be worn above or below your suit. Alt-Right-click to toggle.")
 	if(clip_on)
 		. += span_notice("Looking closely, you can see that it's actually a cleverly disguised clip-on.")
 	else if(!is_tied)
@@ -73,10 +75,9 @@
 	else
 		. += span_notice("The tie can be untied with Alt-Click.")
 
-/obj/item/clothing/neck/tie/AltClick(mob/user)
-	. = ..()
+/obj/item/clothing/neck/tie/click_alt(mob/user)
 	if(clip_on)
-		return
+		return NONE
 	to_chat(user, span_notice("You concentrate as you begin [is_tied ? "untying" : "tying"] [src]..."))
 	var/tie_timer_actual = tie_timer
 	// Mirrors give you a boost to your tying speed. I realize this stacks and I think that's hilarious.
@@ -88,11 +89,11 @@
 	// Tie/Untie our tie
 	if(!do_after(user, tie_timer_actual))
 		to_chat(user, span_notice("Your fingers fumble away from [src] as your concentration breaks."))
-		return
+		return CLICK_ACTION_BLOCKING
 	// Clumsy & Dumb people have trouble tying their ties.
 	if((HAS_TRAIT(user, TRAIT_CLUMSY) || HAS_TRAIT(user, TRAIT_DUMB)) && prob(50))
 		to_chat(user, span_notice("You just can't seem to get a proper grip on [src]!"))
-		return
+		return CLICK_ACTION_BLOCKING
 	// Success!
 	is_tied = !is_tied
 	user.visible_message(
@@ -101,6 +102,15 @@
 	)
 	update_appearance(UPDATE_ICON)
 	user.update_clothing(ITEM_SLOT_NECK)
+	return CLICK_ACTION_SUCCESS
+
+/obj/item/clothing/neck/tie/alt_click_secondary(mob/user)
+	. = ..()
+	if(!user.can_perform_action(src, NEED_DEXTERITY))
+		return	
+	alternate_worn_layer = alternate_worn_layer == initial(alternate_worn_layer) ? NONE : initial(alternate_worn_layer)
+	user.update_clothing(ITEM_SLOT_NECK)
+	balloon_alert(user, "wearing [alternate_worn_layer == initial(alternate_worn_layer) ? "below" : "above"] suits")
 
 /obj/item/clothing/neck/tie/update_icon()
 	. = ..()
@@ -120,6 +130,7 @@
 
 /obj/item/clothing/neck/tie/add_context(atom/source, list/context, obj/item/held_item, mob/user)
 	. = ..()
+	context[SCREENTIP_CONTEXT_ALT_RMB] = "Wear [alternate_worn_layer == initial(alternate_worn_layer) ? "above" : "below"] suit"
 	if(clip_on)
 		return
 	if(is_tied)
@@ -127,6 +138,17 @@
 	else
 		context[SCREENTIP_CONTEXT_ALT_LMB] = "Tie"
 	return CONTEXTUAL_SCREENTIP_SET
+
+/obj/item/clothing/neck/tie/worn_overlays(mutable_appearance/standing, isinhands)
+	. = ..()
+	var/mob/living/carbon/human/wearer = loc
+	if(!ishuman(wearer) || !wearer.w_uniform)
+		return
+	var/obj/item/clothing/under/undershirt = wearer.w_uniform
+	if(!istype(undershirt) || !LAZYLEN(undershirt.attached_accessories))
+		return
+	if(alternate_worn_layer)
+		. += undershirt.accessory_overlay
 
 /obj/item/clothing/neck/tie/blue
 	name = "blue tie"
@@ -409,7 +431,7 @@
 	icon_state = "infinity_scarf"
 	w_class = WEIGHT_CLASS_TINY
 	custom_price = PAYCHECK_CREW
-	greyscale_colors = "#EEEEEE"
+	greyscale_colors = COLOR_VERY_LIGHT_GRAY
 	greyscale_config = /datum/greyscale_config/infinity_scarf
 	greyscale_config_worn = /datum/greyscale_config/infinity_scarf/worn
 	flags_1 = IS_PLAYER_COLORABLE_1
@@ -469,7 +491,7 @@
 		var/true_price = round(price*profit_scaling)
 		to_chat(user, span_notice("[selling ? "Sold" : "Getting the price of"] [I], value: <b>[true_price]</b> credits[I.contents.len ? " (exportable contents included)" : ""].[profit_scaling < 1 && selling ? "<b>[round(price-true_price)]</b> credit\s taken as processing fee\s." : ""]"))
 		if(selling)
-			new /obj/item/holochip(get_turf(user),true_price)
+			new /obj/item/holochip(get_turf(user), true_price)
 	else
 		to_chat(user, span_warning("There is no export value for [I] or any items within it."))
 
@@ -487,3 +509,23 @@
 /obj/item/clothing/neck/beads/Initialize(mapload)
 	. = ..()
 	color = color = pick("#ff0077","#d400ff","#2600ff","#00ccff","#00ff2a","#e5ff00","#ffae00","#ff0000", "#ffffff")
+
+/obj/item/clothing/neck/wreath
+	name = "\improper Watcher Wreath"
+	desc = "An elaborate crown made from the twisted flesh and sinew of a watcher. \
+		Wearing it makes you feel like you have eyes in the back of your head."
+	icon_state = "watcher_wreath"
+	worn_y_offset = 10
+	alternate_worn_layer = ABOVE_BODY_FRONT_HEAD_LAYER
+	resistance_flags = FIRE_PROOF
+
+/obj/item/clothing/neck/wreath/worn_overlays(mutable_appearance/standing, isinhands, icon_file)
+	. = ..()
+	if(!isinhands)
+		. += emissive_appearance(icon_file, "wreath_emissive", src, alpha = src.alpha)
+
+/obj/item/clothing/neck/wreath/icewing
+	name = "\improper Icewing Wreath"
+	desc = "An elaborate crown made from the twisted flesh and sinew of an icewing watcher. \
+		Wearing it sends shivers down your spine just from being near it."
+	icon_state = "icewing_wreath"
